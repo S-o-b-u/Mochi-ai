@@ -23,34 +23,46 @@ persona_router = APIRouter()
     response_model=PersonaInDB, 
     status_code=status.HTTP_201_CREATED
 ) 
+@persona_router.post(
+    "/personas", 
+    response_model=PersonaInDB,
+    status_code=status.HTTP_201_CREATED
+)
 async def create_persona(
-    persona_data: CreatePersonaRequest, 
-    request: Request, 
+    persona_data: CreatePersonaRequest, # This now contains the new fields
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(clerk_auth_guard)
-): 
+):
     user_id = credentials.decoded.get("sub")
-    if not user_id: 
+    if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID not found")
-    
+
     db = request.app.database
     personas_collection = db["personas"]
-    
+
+    # Create the persona document to insert
     new_persona = PersonaInDB(
-        user_id=user_id, 
-        name = persona_data.name, 
-        description=persona_data.description, 
-        tone=persona_data.tone, 
-        is_public=persona_data.is_public
+        user_id=user_id,
+        name=persona_data.name,
+        description=persona_data.description,
+        tone=persona_data.tone,
+        is_public=persona_data.is_public,
+        
+        # --- MAP THE NEW FIELDS ---
+        greeting=persona_data.greeting,
+        relationship=persona_data.relationship,
+        forbidden_topics=persona_data.forbidden_topics
     )
-    
+
+    # Insert into MongoDB
     inserted_result = await personas_collection.insert_one(
-        new_persona.model_dump(by_alias=True, exclude_none=True)
+        new_persona.model_dump(by_alias=True, exclude_none=True) 
     )
-    
-    created_persona_doc = await personas_collection.find_one({"_id": inserted_result.inserted_id })
-    if created_persona_doc is None: 
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create Persona")
-    
+
+    created_persona_doc = await personas_collection.find_one({"_id": inserted_result.inserted_id})
+    if created_persona_doc is None:
+         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create persona")
+
     return created_persona_doc
 
 
