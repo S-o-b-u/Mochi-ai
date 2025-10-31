@@ -5,8 +5,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
-from router.chat import router 
-
+from router.chat import chat_router 
+from router.personas import persona_router
+from router.chats import session_router
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 load_dotenv()
@@ -49,8 +50,9 @@ app.add_middleware(
 )
 
 
-app.include_router(router, prefix="/api")
-
+app.include_router(chat_router, prefix="/api")
+app.include_router(persona_router, prefix="/api")
+app.include_router(session_router, prefix="/api")
 
 @app.get("/")
 def read_root():
