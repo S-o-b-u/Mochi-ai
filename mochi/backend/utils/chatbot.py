@@ -101,7 +101,7 @@ async def generate_stream_response(api_key: str, chat_payload: ChatRequest):
         final_instruction = final_instruction.replace("{{user.message}}", chat_payload.message)
 
         # Generate content
-        llm_model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        llm_model = genai.GenerativeModel('gemini-pro')
         llm_stream = await llm_model.generate_content_async(final_instruction, stream=True)
         
         async for chunk in llm_stream:

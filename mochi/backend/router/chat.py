@@ -1,11 +1,22 @@
 import os
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from models.chat import ChatRequest, MoodLogRequest
 from datetime import datetime
 from utils.chatbot import generate_stream_response
 
-router = APIRouter()
+from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer, HTTPAuthorizationCredentials
+
+from dotenv import load_dotenv
+load_dotenv()
+CLERK_JWKS_URL = os.getenv("CLERK_JWKS_URL")
+if not CLERK_JWKS_URL: 
+    raise ValueError("CLERK_JWKS_URL environment variable not set!")
+
+clerk_config = ClerkConfig(jwks_url=CLERK_JWKS_URL)
+clerk_auth_guard = ClerkHTTPBearer(config=clerk_config)
+
+chat_router = APIRouter()
 
 PREDEFINED_CHARACTERS = {
     "mochi": {
@@ -28,36 +39,56 @@ PREDEFINED_CHARACTERS = {
     }
 }
 
-@router.get("/personas")
+@chat_router.get("/personas")
 async def get_predefined_personas():
     return PREDEFINED_CHARACTERS
 
-@router.post("/chat/stream")
-async def serve_streaming_chat(payload: ChatRequest):
+@chat_router.post("/chat/stream")
+async def serve_streaming_chat(
+    payload: ChatRequest, 
+    credentials: HTTPAuthorizationCredentials = Depends(clerk_auth_guard)
+):
+    
     gemini_api_key = os.getenv("GOOGLE_API_KEY")
     if not gemini_api_key:
         async def error_generator():
             yield "Configuration error: The server's API key is missing."
         return StreamingResponse(error_generator(), media_type="text/event-stream")
-
-    # print(f"Received request body: {payload.model_dump()}")
+    
+    user_id = credentials.decoded.get("sub")
+    if not user_id: 
+        async def error_generator(): 
+            yield "Authentication error: User ID not found in token"
+        return StreamingResponse(error_generator(), media_type="text/event-stream")
+    print(f"Request from user {user_id}")
+    
     return StreamingResponse(
         generate_stream_response(
             api_key=gemini_api_key,
-            chat_payload=payload 
+            chat_payload=payload, 
+            user_id=user_id
         ),
         media_type="text/event-stream"
-    )
+)
 
-@router.post("/log-mood")
-async def log_mood(request: MoodLogRequest, http_request: Request):
+@chat_router.post("/log-mood")
+async def log_mood(
+    request: MoodLogRequest, 
+    http_request:  Request, 
+    credentials: HTTPAuthorizationCredentials = Depends(clerk_auth_guard)
+): 
     db = http_request.app.database
     mood_collection = db["mood_logs"]
     
+    user_id = credentials.decoded.get("sub")
+    if not user_id: 
+        raise HTTPException(status_code=401, detail="User ID not found in token")
+    
     log_entry = {
-        "score": request.score,
-        "timestamp": datetime.now()
+        "score": request.score, 
+        "timestamp": datetime.now(), 
+        "user_id": user_id
     }
     
-    result = await mood_collection.insert_one(log_entry)
-    return {"status": "success", "log_id": str(result.inserted_id)}
+    res = await mood_collection.insert_one(log_entry)
+    return {"status": "success", "log_id": str(res.inserted_id)}
