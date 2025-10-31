@@ -1,7 +1,8 @@
 import google.generativeai as genai
-from models.chat import ChatRequest # Assuming your Pydantic model is here
+from google.api_core import exceptions
+from typing import List, Dict, Any
+from models.chat import MessageInDB 
 
-# The AI_INSTRUCTION_TEMPLATE remains the same.
 AI_INSTRUCTION_TEMPLATE = """
 You are {{persona.name}}, a compassionate AI mental health support companion. Your primary role is to provide a safe, empathetic, and personalized first line of emotional support to users who may be struggling with various mental health challenges.
 
@@ -41,13 +42,7 @@ Respond as {{persona.name}} in your characteristic {{persona.tone}} style. Provi
 **Formatting:** Use Markdown for emphasis. Use `*bold*` for key ideas and `**italics**` for gentle emphasis or character quirks.
 """
 
-
 PREDEFINED_CHARACTERS = {
-    "mochi": {
-        "name": "Mochi",
-        "description": "A calm, patient, and deeply empathetic listener. Your purpose is to provide a safe space and validate the user's feelings without judgment.",
-        "tone": "Gentle, reassuring, and soft"
-    },
     "doraemon": {
         "name": "Doraemon",
         "description": "A helpful and optimistic robotic cat from the 22nd century. Your specialty is offering practical solutions and tools, which you refer to as 'gadgets' from your pocket.",
@@ -65,43 +60,36 @@ PREDEFINED_CHARACTERS = {
     }
 }
 
-async def generate_stream_response(api_key: str, chat_payload: ChatRequest):
+async def generate_stream_response(
+    api_key: str,
+    user_message: str,
+    full_history: List[MessageInDB], 
+    persona_details: Dict[str, Any]   
+):
+    """
+    Generates a streamed response from Gemini.
+    This function is now a pure "prompt builder" and LLM caller.
+    """
     try:
         genai.configure(api_key=api_key)
+
         final_instruction = AI_INSTRUCTION_TEMPLATE
 
-        persona_data = chat_payload.persona.dict()
-        persona_id = persona_data.get("id", "").lower()
-
-        if persona_id.startswith("custom"):
-            char_name = persona_data.get("name") or "Custom Persona"
-            char_desc = persona_data.get("description") or "A helpful companion."
-            char_tone = persona_data.get("tone") or "a neutral tone."
-        else:
-            details = PREDEFINED_CHARACTERS.get(persona_id, PREDEFINED_CHARACTERS["mochi"])
-            char_name = details.get("name") or "Mochi"
-            char_desc = details.get("description") or "A caring companion."
-            char_tone = details.get("tone") or "an empathetic tone."
+        char_name = persona_details.get("name", "Mochi")
+        char_desc = persona_details.get("description", "A caring companion.")
+        char_tone = persona_details.get("tone", "Empathetic")
 
         final_instruction = final_instruction.replace("{{persona.name}}", char_name)
         final_instruction = final_instruction.replace("{{persona.description}}", char_desc)
         final_instruction = final_instruction.replace("{{persona.tone}}", char_tone)
 
-        # --- THIS IS THE FINAL FIX ---
-        # We now access attributes using dot notation (msg.role) because 'msg' is an object.
-        history_parts = []
-        for msg in chat_payload.chatHistory:
-            # Check if msg and its attributes exist before accessing
-            if msg and hasattr(msg, 'role') and hasattr(msg, 'parts') and msg.parts:
-                history_parts.append(f"{msg.role}: {msg.parts[0]}")
-        # ---------------------------
-        
-        conversation_context = "\n".join(history_parts)
-        final_instruction = final_instruction.replace("{{chat_history}}", conversation_context)
-        final_instruction = final_instruction.replace("{{user.message}}", chat_payload.message)
+        history_text = "\n".join([f"{msg.role}: {msg.parts[0]}" for msg in full_history])
+        final_instruction = final_instruction.replace("{{chat_history}}", history_text)
 
-        # Generate content
-        llm_model = genai.GenerativeModel('gemini-pro')
+        final_instruction = final_instruction.replace("{{user.message}}", user_message)
+        
+        llm_model = genai.GenerModel('gemini-1.5-flash') 
+       
         llm_stream = await llm_model.generate_content_async(final_instruction, stream=True)
         
         async for chunk in llm_stream:
@@ -111,4 +99,3 @@ async def generate_stream_response(api_key: str, chat_payload: ChatRequest):
     except Exception as e:
         print(f"LLM streaming failed with exception: {e}")
         yield "Apologies, I'm experiencing a technical difficulty. Could you try again?"
-
