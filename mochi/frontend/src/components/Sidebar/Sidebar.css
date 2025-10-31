@@ -1,0 +1,22 @@
+.recents::-webkit-scrollbar{
+    display: none;
+}
+.recent-content {
+    transition: all .3s ease;
+}
+.recent-content:hover {
+   background-color: #282a2c;
+}
+.fade-in {
+  opacity: 0;
+  animation: fadeIn 1s ease-in-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

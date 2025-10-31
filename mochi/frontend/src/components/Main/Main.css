@@ -1,0 +1,40 @@
+body {
+  font-family: "customfont", sans-serif;
+}
+
+#logo {
+  font-family: "logoFont";
+}
+
+.greet-cards p {
+  color: #e4e4e7;
+}
+.greet-cards span {
+  color: #a5fd0b;
+}
+.result::-webkit-scrollbar {
+  display: none;
+}
+
+.result-data p {
+  line-height: 2;
+  font-family: "chat";
+  width: 90%;
+}
+.result-data p b {
+   color: #a5fd0b;
+}
+.result-data p h2 {
+   color:  #E4E4E7; 
+}
+.prompt button {
+  animation: lift 0.5s ease-in;
+}
+@keyframes lift {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
